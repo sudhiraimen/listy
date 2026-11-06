@@ -1,4 +1,4 @@
-# Shelf
+# Listy
 
 A small installable web app (PWA) for keeping lists of movies, TV shows, games, books, albums and anime. Covers are found automatically when you add something.
 
@@ -32,7 +32,7 @@ No API keys needed. Each category searches a free source, falling back to Wikipe
 
 ### Pasting a link
 
-Paste a link into the search box (or use **Paste a link** under Change cover) and Shelf pulls the cover from that page. It also shows other covers for the same title, in case the page's image isn't a poster.
+Paste a link into the search box (or use **Paste a link** under Change cover) and Listy pulls the cover from that page. It also shows other covers for the same title, in case the page's image isn't a poster.
 
 - IMDb, Wikipedia, Steam, TVmaze, MyAnimeList, Open Library and Apple links are read through those sites' own free APIs.
 - Any other site (Letterboxd, Goodreads, Backloggd, stores…) is read through Microlink, which finds the page's preview image. Its free tier allows about 50 links a day; if it's unavailable, a public proxy (allorigins) is tried.

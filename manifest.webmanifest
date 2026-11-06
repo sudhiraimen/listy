@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Shelf",
-  "short_name": "Shelf",
+  "name": "Listy",
+  "short_name": "Listy",
   "description": "Lists of movies, shows, games and books to get to.",
   "start_url": "./",
   "scope": "./",
