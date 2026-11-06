@@ -1,5 +1,5 @@
 // Shelf service worker: offline app shell + cached cover images.
-const SHELL_CACHE = 'shelf-shell-v4';
+const SHELL_CACHE = 'shelf-shell-v5';
 const COVER_CACHE = 'shelf-covers-v1';
 const MAX_COVERS = 400;
 const SHELL = ['./', './index.html', './manifest.webmanifest',
