@@ -1,5 +1,5 @@
-// Shelf service worker: offline app shell + cached cover images.
-const SHELL_CACHE = 'shelf-shell-v5';
+// Listy service worker: offline app shell + cached cover images.
+const SHELL_CACHE = 'shelf-shell-v9';
 const COVER_CACHE = 'shelf-covers-v1';
 const MAX_COVERS = 400;
 const SHELL = ['./', './index.html', './manifest.webmanifest',
@@ -26,10 +26,23 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // App files: serve from cache right away, refresh in the background.
+  // The app page: try the network first so updates show up right away; use the saved copy
+  // when offline or if the network takes longer than 3 seconds.
+  if (req.mode === 'navigate' && url.origin === self.location.origin) {
+    e.respondWith(caches.open(SHELL_CACHE).then(async c => {
+      const saved = c.match('./index.html');
+      const net = fetch(req).then(r => { if (r.ok) c.put('./index.html', r.clone()); return r; });
+      const slow = new Promise(res => setTimeout(res, 3000)).then(() => saved);
+      try { return (await Promise.race([net, slow])) || await net; }
+      catch { return (await saved) || Response.error(); }
+    }));
+    return;
+  }
+
+  // Other app files (icons, manifest): serve from cache right away, refresh in the background.
   if (url.origin === self.location.origin) {
     e.respondWith(caches.open(SHELL_CACHE).then(async c => {
-      const hit = await c.match(req, { ignoreSearch: true }) || (req.mode === 'navigate' ? await c.match('./index.html') : undefined);
+      const hit = await c.match(req, { ignoreSearch: true });
       const net = fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; }).catch(() => hit || Response.error());
       return hit || net;
     }));

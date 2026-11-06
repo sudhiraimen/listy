@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Shelf</title>
+<title>Listy</title>
 <meta name="description" content="Lists of movies, shows, games and books to get to.">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Shelf">
+<meta name="apple-mobile-web-app-title" content="Listy">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&display=swap">
@@ -118,7 +118,7 @@ main.home{max-width:720px}
 .toolbar[hidden]{display:none}
 
 /* progress */
-.progress{height:4px;border-radius:2px;background:rgba(127,127,127,.28);overflow:hidden;max-width:220px}
+.progress{display:block;height:4px;border-radius:2px;background:rgba(127,127,127,.28);overflow:hidden;max-width:220px}
 .progress span{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .4s cubic-bezier(.2,.9,.3,1)}
 .list-card .progress{max-width:150px;background:rgba(255,255,255,.22)}
 .list-card .progress span{background:#fff}
@@ -304,7 +304,7 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 </head>
 <body>
 <div id="app"></div>
-<noscript><p class="hint">Shelf needs JavaScript to run.</p></noscript>
+<noscript><p class="hint">Listy needs JavaScript to run.</p></noscript>
 <script>
 'use strict';
 
@@ -324,10 +324,8 @@ const ICONS = {
   plus:'<path d="M12 5v14M5 12h14"/>',
   x:'<path d="M6 6l12 12M18 6 6 18"/>',
   check:'<path d="M5 12.5 9.5 17 19 7.5"/>',
-  chev:'<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
   search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>',
   sort:'<path d="M7 4v16M3.5 7.5 7 4l3.5 3.5M17 20V4M13.5 16.5 17 20l3.5-3.5"/>',
-  filter:'<path d="M4 6.5h16M7 12h10M10 17.5h4"/>',
   film:'<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M7.5 3.5v17M16.5 3.5v17M3.5 8.5h4M3.5 15.5h4M16.5 8.5h4M16.5 15.5h4"/>',
   tv:'<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="m8.5 2.5 3.5 3.5 3.5-3.5"/>',
   game:'<path d="M7.5 7h9a5 5 0 0 1 4.9 6l-.6 3.2a2.6 2.6 0 0 1-4.5 1.2L14.5 15h-5l-1.8 2.4a2.6 2.6 0 0 1-4.5-1.2L2.6 13a5 5 0 0 1 4.9-6z"/><path d="M8 9.8v3.4M6.3 11.5h3.4"/><path d="M15.5 10.5h.01M17.5 12.5h.01" stroke-width="2.6"/>',
@@ -478,14 +476,17 @@ const LINK_SOURCES = [
       const m = u.pathname.match(/\/wiki\/(.+)/);
       return m ? wikiPage(decodeURIComponent(m[1]).replace(/_/g, ' '), signal, u.hostname.replace('.m.', '.')) : null;
   } },
-  { match: (h, u) => h === 'store.steampowered.com' && /\/app\/\d+/.test(u.pathname), async get(u) {
+  { match: (h, u) => h === 'store.steampowered.com' && /\/app\/\d+/.test(u.pathname), async get(u, signal) {
       const m = u.pathname.match(/\/app\/(\d+)(?:\/([^/?#]+))?/);
       const id = m[1];
       const tries = [`https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_600x900_2x.jpg`,
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_600x900.jpg`,
         `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${id}/library_600x900.jpg`,
         `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`];
-      for (const src of tries) if (await imageOK(src)) return { title: m[2] ? decodeURIComponent(m[2]).replace(/_/g, ' ') : '', cover: src };
+      for (const src of tries) {
+        if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (await imageOK(src)) return { title: m[2] ? decodeURIComponent(m[2]).replace(/_/g, ' ') : '', cover: src };
+      }
       return null;
   } },
   { match: h => h.endsWith('tvmaze.com'), async get(u, signal) {
@@ -549,8 +550,12 @@ async function fromLink(href, signal) {
 const KEY = 'shelf.v1';
 let storageOK = true;
 let db = (() => {
-  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && Array.isArray(d.lists)) return d; }
-  catch (e) { if (e.name === 'SecurityError') storageOK = false; }
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); const d = JSON.parse(raw); if (d && Array.isArray(d.lists)) return d; }
+  catch (e) {
+    if (e.name === 'SecurityError') storageOK = false;
+    else if (raw) try { localStorage.setItem(KEY + '.unreadable', raw); } catch {}
+  }
   return { lists: [] };
 })();
 function save() {
@@ -571,7 +576,7 @@ let hash = location.hash; // tracked in memory too, so navigation works where th
 
 function route() {
   closeMenu();
-  while (sheets.length) sheets[sheets.length - 1].close();
+  while (sheets.length) sheets[sheets.length - 1].close(true);
   const m = hash.match(/^#list-(\w+)$/);
   const l = m && getList(m[1]);
   if (l) {
@@ -583,9 +588,18 @@ function route() {
 }
 let historyOK = true;
 function go(h) {
-  hash = h;
-  try { history.pushState({ app: true }, '', h); } catch { historyOK = false; }
-  route(); scrollTo(0, 0);
+  // Remove any open popup first and let the screen repaint before navigating.
+  // iPhones save a screenshot of the page when you leave it and show it again on the way back,
+  // so a popup that's still on screen at this moment would reappear when returning.
+  closeMenu();
+  const hadSheet = sheets.length > 0;
+  while (sheets.length) sheets[sheets.length - 1].close(true);
+  const nav = () => {
+    hash = h;
+    try { history.pushState({ app: true }, '', h); } catch { historyOK = false; }
+    route(); scrollTo(0, 0);
+  };
+  if (hadSheet) requestAnimationFrame(() => requestAnimationFrame(nav)); else nav();
 }
 function back() {
   let st = null;
@@ -615,9 +629,9 @@ function setAccent(key) {
   const k = COLORS[key] || COLORS.other;
   root.setProperty('--cat-d', k.d); root.setProperty('--cat-l', k.l); root.setProperty('--on-d', k.od); root.setProperty('--on-l', k.ol);
 }
-const ambientHTML = cover => `<div class="ambient" aria-hidden="true">${cover
-  ? `<img src="${esc(cover)}" alt="" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=&quot;tint&quot;></div>'">`
-  : '<div class="tint"></div>'}</div>`;
+const ambientHTML = cover => `<span class="ambient" aria-hidden="true">${cover
+  ? `<img src="${esc(cover)}" alt="" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=&quot;tint&quot;></span>'">`
+  : '<span class="tint"></span>'}</span>`;
 const newest = l => [...l.items].sort((a, b) => b.added - a.added);
 const firstCover = items => (items.find(i => i.cover) || {}).cover || '';
 
@@ -640,7 +654,7 @@ function countLine(l) {
   if (!n) return `No ${c.many} yet`;
   return `${doneCount(l)} of ${n} ${c.done.toLowerCase()}`;
 }
-const progressHTML = l => `<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${l.items.length}" aria-valuenow="${doneCount(l)}"><span style="width:${l.items.length ? Math.round(doneCount(l) / l.items.length * 100) : 0}%"></span></div>`;
+const progressHTML = l => `<span class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${l.items.length}" aria-valuenow="${doneCount(l)}"><span style="width:${l.items.length ? Math.round(doneCount(l) / l.items.length * 100) : 0}%"></span></span>`;
 
 // Show the small title in the top bar once the big one scrolls away.
 function watchScroll() {
@@ -651,7 +665,7 @@ addEventListener('scroll', watchScroll, { passive: true });
 
 /* ---------- home ---------- */
 function renderHome() {
-  document.title = 'Shelf';
+  document.title = 'Listy';
   setAccent(null);
   const total = db.lists.reduce((n, l) => n + l.items.length, 0);
   const cards = db.lists.map(l => {
@@ -669,16 +683,16 @@ function renderHome() {
   }).join('');
   app.innerHTML = `
     <header class="bar bar-home">
-      <h1 class="bar-title" aria-hidden="true">Shelf</h1>
+      <h1 class="bar-title" aria-hidden="true">Listy</h1>
       <div class="bar-actions"><button class="circle" data-act="home-menu" aria-label="Backup options">${icon('more')}</button></div>
     </header>
     <main class="home">${db.lists.length ? `
-      <div class="home-head"><h1 class="display">Shelf</h1>
+      <div class="home-head"><h1 class="display">Listy</h1>
         <p class="home-sub">${total} title${total === 1 ? '' : 's'} across ${db.lists.length} list${db.lists.length === 1 ? '' : 's'}</p></div>
       <ul class="lists">${cards}</ul>` : `
       <div class="empty">
         <span class="stack big colors" aria-hidden="true">${['book', 'game', 'movie'].map((k, n) => `<span class="stack-card s${2 - n}" style="background:${COLORS[k].d};--on:${COLORS[k].od}">${icon(CATS[k].icon, 30, 1.6)}</span>`).join('')}</span>
-        <h1 class="display">Your shelf is empty</h1>
+        <h1 class="display">No lists yet</h1>
         <p>Make a list for the movies, shows, games or books you want to get to.</p>
         <button class="btn-primary neutral" data-act="new-list">Create list</button>
       </div>`}</main>
@@ -757,6 +771,7 @@ function updateGrid() {
   if (!l || !wrap) return;
   const c = cat(l), items = visibleItems(l);
   if (!l.items.length) {
+    if (ui.searching || ui.query) { ui.searching = false; ui.query = ''; renderToolbar(); }
     wrap.innerHTML = `<div class="empty">${stackHTML([], c, true)}
       <h2 class="display">Nothing here yet</h2>
       <p>Search for ${c.a} or paste a link, and its cover is added for you.</p>
@@ -786,7 +801,7 @@ function renderToolbar() {
     q.addEventListener('keydown', e => { if (e.key === 'Enter') q.blur(); });
   } else {
     tb.innerHTML = `
-      <button class="tb${(getList(current) || {}).sort && getList(current).sort !== 'added' ? ' on' : ''}" data-act="sort" aria-label="Sort">${icon('sort')}</button>
+      <button class="tb${l && l.sort && l.sort !== 'added' ? ' on' : ''}" data-act="sort" aria-label="Sort">${icon('sort')}</button>
       <button class="tb${ui.query ? ' on' : ''}" data-act="search" aria-label="Search">${icon('search')}</button>`;
   }
 }
@@ -919,11 +934,12 @@ function sheet({ title = '', left = null, right = null, onRight, onClose, tall =
   let closed = false;
   const api = {
     body,
-    close() {
+    close(instant = false) {
       if (closed) return;
       closed = true;
       sheets.splice(sheets.indexOf(api), 1);
       if (!sheets.length) document.body.classList.remove('locked');
+      if (instant) { w.remove(); if (onClose) onClose(); return; }
       w.classList.add('closing');
       sec.style.transition = 'transform .25s ease-in';
       sec.style.transform = 'translateY(105%)';
@@ -932,7 +948,7 @@ function sheet({ title = '', left = null, right = null, onRight, onClose, tall =
     }
   };
   sheets.push(api);
-  $('.sheet-scrim', w).addEventListener('click', api.close);
+  $('.sheet-scrim', w).addEventListener('click', () => api.close());
   $('.sheet-head', w).addEventListener('click', e => {
     const t = e.target.closest('[data-s]');
     if (!t) return;
@@ -1038,9 +1054,9 @@ function openNewList() {
     const name = $('#nl-name', api.body).value.trim() || CATS[chosen].label;
     const l = { id: uid(), name, category: chosen, sort: 'added', created: Date.now(), items: [] };
     db.lists.push(l); save();
-    api.close();
     go('#list-' + l.id);
-    setTimeout(() => openAdd(l), 300);
+    // Open "Add" only if you're still looking at this list.
+    setTimeout(() => { if (current === l.id && !sheets.length) openAdd(l); }, 350);
   };
   const s = sheet({ title: 'New list', left: 'Cancel', right: 'Create', onRight: create });
   s.body.innerHTML = `
@@ -1107,7 +1123,7 @@ function openItem(l, item) {
     <div class="stars" role="group" aria-label="Your rating">${[1, 2, 3, 4, 5].map(n => `<button class="star${item.rating >= n ? ' on' : ''}" data-d="star" data-n="${n}" aria-label="${n} star${n > 1 ? 's' : ''}">${icon('star', 26, 1.6)}</button>`).join('')}</div>
     <textarea class="note" placeholder="Add a note" rows="3" aria-label="Note">${esc(item.note)}</textarea>
     <div class="group">
-      ${item.link ? `<a class="row" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">${icon('link', 20)}Open ${esc(hostOf(item.link) || 'link')}</a>` : ''}
+      ${safeLink(item.link) ? `<a class="row" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">${icon('link', 20)}Open ${esc(hostOf(item.link) || 'link')}</a>` : ''}
       <button class="row" data-d="cover">${icon('image', 20)}Change cover</button>
       ${others.length ? `<button class="row" data-d="move">${icon('move', 20)}Move to another list</button>` : ''}
       <button class="row danger" data-d="delete">${icon('trash', 20)}Delete ${c.one}</button>
@@ -1120,7 +1136,8 @@ function openItem(l, item) {
   };
 
   const title = $('.detail-title', B);
-  title.addEventListener('change', () => { const v = title.value.trim(); if (v) { item.title = v; save(); updateGrid(); } else title.value = item.title; });
+  title.addEventListener('input', () => { const v = title.value.trim(); if (v) { item.title = v; save(); updateGrid(); } });
+  title.addEventListener('blur', () => { title.value = item.title; fit(); });
   const fit = () => { title.style.height = 'auto'; title.style.height = title.scrollHeight + 'px'; };
   requestAnimationFrame(fit);
   title.addEventListener('input', fit);
@@ -1166,10 +1183,9 @@ function openCoverPicker(l, item, onDone) {
     </div>
     <div class="results"></div>`;
   const set = (url, extra = {}) => {
-    const prev = item.cover;
-    item.cover = url;
-    Object.assign(item, extra);
-    if (!save()) { item.cover = prev; return; }
+    const prev = { ...item };
+    Object.assign(item, extra, { cover: url });
+    if (!save()) { Object.assign(item, prev); return; }
     onDone(); s.close();
     toast(url ? 'Cover updated' : 'Cover removed');
   };
@@ -1226,16 +1242,25 @@ async function shareList(l) {
   try { await navigator.clipboard.writeText(text); toast('List copied'); } catch { toast('Sharing isn’t available in this browser'); }
 }
 async function exportBackup() {
-  const name = `shelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  const file = new File([JSON.stringify({ app: 'shelf', version: 1, exported: new Date().toISOString(), lists: db.lists })], name, { type: 'application/json' });
+  const name = `listy-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const file = new File([JSON.stringify({ app: 'listy', version: 1, exported: new Date().toISOString(), lists: db.lists })], name, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Shelf backup' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: 'Listy backup' }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file); a.download = name;
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+// Backups are plain JSON, so check every field before trusting it.
+const safeId = id => (typeof id === 'string' && /^\w{1,40}$/.test(id) ? id : uid());
+const safeLink = u => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : '');
+const safeCover = u => (typeof u === 'string' && /^(https?:\/\/|data:image\/)/i.test(u) ? u : '');
+const cleanItem = i => ({
+  id: safeId(i.id), title: String(i.title).slice(0, 160), year: yr(i.year), sub: String(i.sub || '').slice(0, 200),
+  cover: safeCover(i.cover), link: safeLink(i.link), status: i.status === 'done' ? 'done' : 'pending',
+  rating: Math.min(5, Math.max(0, Math.round(+i.rating) || 0)), note: String(i.note || ''), added: +i.added || Date.now()
+});
 function importBackup() {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'application/json,.json';
@@ -1247,20 +1272,20 @@ function importBackup() {
       let n = 0;
       for (const l of lists) {
         if (!l || typeof l.name !== 'string' || !Array.isArray(l.items)) continue;
+        const items = l.items.filter(i => i && i.title).map(cleanItem);
         const existing = getList(l.id);
         if (existing) {
           const ids = new Set(existing.items.map(i => i.id));
-          existing.items.push(...l.items.filter(i => i && i.title && !ids.has(i.id)));
+          existing.items.push(...items.filter(i => !ids.has(i.id)));
         } else {
-          db.lists.push({ id: l.id || uid(), name: l.name, category: CATS[l.category] ? l.category : 'other', sort: l.sort || 'added', created: l.created || Date.now(),
-            items: l.items.filter(i => i && i.title).map(i => ({ id: i.id || uid(), title: String(i.title), year: i.year || '', sub: i.sub || '', cover: i.cover || '', link: i.link || '',
-              status: i.status === 'done' ? 'done' : 'pending', rating: +i.rating || 0, note: i.note || '', added: i.added || Date.now() })) });
+          db.lists.push({ id: safeId(l.id), name: l.name.slice(0, 60), category: CATS[l.category] ? l.category : 'other',
+            sort: ['added', 'title', 'year', 'rating'].includes(l.sort) ? l.sort : 'added', created: +l.created || Date.now(), items });
         }
         n++;
       }
       save(); route();
       toast(`Imported ${n} list${n === 1 ? '' : 's'}`);
-    } catch { toast('That file isn’t a Shelf backup'); }
+    } catch { toast('That file isn’t a Listy backup'); }
   };
   inp.click();
 }
@@ -1278,7 +1303,6 @@ function toast(msg) {
 
 /* ---------- no pinch or double-tap zoom, like a native app ---------- */
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
-document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
 /* ---------- boot ---------- */
 route();
