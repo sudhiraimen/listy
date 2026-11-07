@@ -610,6 +610,7 @@ function back() {
   route();
 }
 addEventListener('popstate', () => { hash = location.hash; route(); });
+try { history.scrollRestoration = 'manual'; } catch {}
 
 /* ---------- shared bits ---------- */
 // Each category has its own color, tuned separately for dark (d) and light (l) mode.
@@ -798,7 +799,7 @@ function renderToolbar() {
     const q = $('#list-q');
     q.focus({ preventScroll: true });
     q.addEventListener('input', () => { ui.query = q.value; updateGrid(); });
-    q.addEventListener('keydown', e => { if (e.key === 'Enter') q.blur(); });
+    q.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) q.blur(); });
   } else {
     tb.innerHTML = `
       <button class="tb${l && l.sort && l.sort !== 'added' ? ' on' : ''}" data-act="sort" aria-label="Sort">${icon('sort')}</button>
@@ -877,7 +878,8 @@ function menu(anchor, items) {
   Object.assign(m.style, { left: left + 'px', top: top + 'px', transformOrigin: `${r.left + r.width / 2 - left}px ${below ? 0 : mh}px` });
   const close = () => { scrim.remove(); m.remove(); openMenu = null; };
   openMenu = { close };
-  scrim.addEventListener('click', close);
+  const opened = Date.now();
+  scrim.addEventListener('click', () => { if (Date.now() - opened > 400) close(); });
   m.addEventListener('click', e => {
     const b = e.target.closest('[data-k]');
     if (!b) return;
@@ -948,7 +950,8 @@ function sheet({ title = '', left = null, right = null, onRight, onClose, tall =
     }
   };
   sheets.push(api);
-  $('.sheet-scrim', w).addEventListener('click', () => api.close());
+  const opened = Date.now();
+  $('.sheet-scrim', w).addEventListener('click', () => { if (Date.now() - opened > 400) api.close(); });
   $('.sheet-head', w).addEventListener('click', e => {
     const t = e.target.closest('[data-s]');
     if (!t) return;
@@ -974,7 +977,7 @@ function askText({ title, value = '', placeholder = '', confirm: label = 'Save',
     const inp = $('input', s.body);
     inp.focus();
     inp.select();
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { finish(inp.value.trim()); s.close(); } });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { finish(inp.value.trim()); s.close(); } });
   });
 }
 
@@ -987,7 +990,7 @@ function bindSearch(field, run) {
   const inp = $('input', field), clr = $('.clear', field);
   let t;
   inp.addEventListener('input', () => { clr.hidden = !inp.value; clearTimeout(t); t = setTimeout(() => run(inp.value), 380); });
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(t); run(inp.value); inp.blur(); } });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { clearTimeout(t); run(inp.value); inp.blur(); } });
   clr.addEventListener('click', e => { e.preventDefault(); inp.value = ''; clr.hidden = true; run(''); inp.focus(); });
   return inp;
 }
@@ -1065,7 +1068,7 @@ function openNewList() {
     <div class="cats">${Object.entries(CATS).map(([k, c]) => `<button class="cat" style="${catVars(k)}" data-cat="${k}" aria-pressed="${k === chosen}"><span class="swatch">${icon(c.icon, 22, 1.8)}</span><span>${c.label}</span></button>`).join('')}</div>
     <p class="field-help">The category decides where covers are found.</p>`;
   const name = $('#nl-name', s.body);
-  name.addEventListener('keydown', e => { if (e.key === 'Enter') create(s); });
+  name.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) create(s); });
   s.body.addEventListener('click', e => {
     const b = e.target.closest('[data-cat]');
     if (!b) return;
@@ -1109,7 +1112,16 @@ function openAdd(l) {
 function openItem(l, item) {
   if (!item) return;
   const c = cat(l);
-  const s = sheet({ x: true, title: '', ambient: item.cover || '' });
+  let saveTimer;
+  const commit = () => {
+    clearTimeout(saveTimer);
+    const t = title.value.trim();
+    if (t) item.title = t;
+    item.note = note.value;
+    save(); updateGrid();
+  };
+  const commitSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(commit, 400); };
+  const s = sheet({ x: true, title: '', ambient: item.cover || '', onClose: () => commit() });
   const metaHTML = () => `${item.year ? `<span>${esc(item.year)}</span>` : ''}${item.sub && !(item.year && item.sub.includes(item.year)) ? `<span>${esc(item.sub)}</span>` : ''}`;
   const others = db.lists.filter(x => x !== l);
   s.body.innerHTML = `<div class="detail" style="--ratio:${c.ratio}">
@@ -1136,16 +1148,14 @@ function openItem(l, item) {
   };
 
   const title = $('.detail-title', B);
-  title.addEventListener('input', () => { const v = title.value.trim(); if (v) { item.title = v; save(); updateGrid(); } });
-  title.addEventListener('blur', () => { title.value = item.title; fit(); });
+  const note = $('.note', B);
   const fit = () => { title.style.height = 'auto'; title.style.height = title.scrollHeight + 'px'; };
   requestAnimationFrame(fit);
-  title.addEventListener('input', fit);
-  title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } });
-  const note = $('.note', B);
-  let nt;
-  note.addEventListener('input', () => { clearTimeout(nt); nt = setTimeout(() => { item.note = note.value; save(); }, 300); });
-  note.addEventListener('blur', () => { item.note = note.value; save(); });
+  title.addEventListener('input', () => { fit(); commitSoon(); });
+  title.addEventListener('blur', () => { commit(); title.value = item.title; fit(); });
+  title.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); title.blur(); } });
+  note.addEventListener('input', commitSoon);
+  note.addEventListener('blur', commit);
 
   B.addEventListener('click', e => {
     const b = e.target.closest('[data-d]');
@@ -1263,8 +1273,11 @@ const cleanItem = i => ({
 });
 function importBackup() {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'application/json,.json';
+  inp.type = 'file'; inp.accept = 'application/json,.json'; inp.hidden = true;
+  document.body.append(inp);
+  inp.addEventListener('cancel', () => inp.remove());
   inp.onchange = async () => {
+    inp.remove();
     try {
       const d = JSON.parse(await inp.files[0].text());
       const lists = Array.isArray(d) ? d : d.lists;
@@ -1309,8 +1322,8 @@ function toast(msg) {
 // leaving a strip at the bottom where "bottom: 0" doesn't reach. Measure it so popups and
 // bottom buttons can extend to the real edge of the screen.
 function measureGap() {
-  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-  if (!standalone || document.activeElement.matches('input, textarea')) return; // keyboard can skew the numbers
+  if (!navigator.standalone || !/iPhone|iPod/.test(navigator.userAgent)) return;
+  if (document.activeElement && document.activeElement.matches('input, textarea')) return; // keyboard can skew the numbers
   const landscape = matchMedia('(orientation: landscape)').matches;
   const screenH = landscape ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
   const gap = Math.round(screenH - innerHeight);

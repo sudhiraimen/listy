@@ -1,5 +1,5 @@
 // Listy service worker: offline app shell + cached cover images.
-const SHELL_CACHE = 'shelf-shell-v10';
+const SHELL_CACHE = 'shelf-shell-v11';
 const COVER_CACHE = 'shelf-covers-v1';
 const MAX_COVERS = 400;
 const SHELL = ['./', './index.html', './manifest.webmanifest',
@@ -32,6 +32,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(caches.open(SHELL_CACHE).then(async c => {
       const saved = c.match('./index.html');
       const net = fetch(req).then(r => { if (r.ok) c.put('./index.html', r.clone()); return r; });
+      net.catch(() => {}); // offline: handled below, don't report it as an error
       const slow = new Promise(res => setTimeout(res, 3000)).then(() => saved);
       try { return (await Promise.race([net, slow])) || await net; }
       catch { return (await saved) || Response.error(); }
